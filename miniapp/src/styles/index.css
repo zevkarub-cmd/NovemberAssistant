@@ -32,7 +32,7 @@
 }
 
 :root {
-  --radius: 1rem;
+  --radius: 1.1rem;
   --background: #f3f4f6;
   --foreground: #1a1410;
   --card: #ffffff;
@@ -50,6 +50,27 @@
   --destructive: #c44536;
   --border: #e4dfd8;
   --input: #e4dfd8;
+  --ring: #d4a574;
+}
+
+.dark {
+  --background: #12100e;
+  --foreground: #f3eee8;
+  --card: #1c1815;
+  --card-foreground: #f3eee8;
+  --popover: #1c1815;
+  --popover-foreground: #f3eee8;
+  --primary: #f3eee8;
+  --primary-foreground: #1a1410;
+  --secondary: #2a241f;
+  --secondary-foreground: #f3eee8;
+  --muted: #2a241f;
+  --muted-foreground: #a89f95;
+  --accent: #d4a574;
+  --accent-foreground: #1a1410;
+  --destructive: #e06a5c;
+  --border: #322c27;
+  --input: #322c27;
   --ring: #d4a574;
 }
 
@@ -74,9 +95,19 @@ body {
   overscroll-behavior: none;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 #root {
   display: flex;
   flex-direction: column;
+}
+
+@keyframes loading {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(220%);
+  }
 }

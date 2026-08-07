@@ -1,8 +1,5 @@
 import type { WebApp, WebAppInitData } from 'telegram-web-app'
 
-/**
- * Telegram Mini App user profile from WebApp.initDataUnsafe.user
- */
 export interface TelegramUser {
   id: number
   username?: string
@@ -18,7 +15,7 @@ export interface TelegramConnection {
   user: TelegramUser | null
   platform: string | null
   version: string | null
-  colorScheme: 'light' | 'dark' | null
+  colorScheme: 'light' | 'dark'
   viewportWidth: number | null
   viewportHeight: number | null
   initDataUnsafe: WebAppInitData | null

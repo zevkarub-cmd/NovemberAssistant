@@ -11,7 +11,7 @@ export function emptyConnection(
     user: null,
     platform: null,
     version: null,
-    colorScheme: null,
+    colorScheme: 'light',
     viewportWidth: null,
     viewportHeight: null,
     initDataUnsafe: null,
@@ -45,6 +45,10 @@ function mapUser(user: WebAppUser | undefined): TelegramUser | null {
   }
 }
 
+function readColorScheme(webApp: WebApp): 'light' | 'dark' {
+  return webApp.colorScheme === 'dark' ? 'dark' : 'light'
+}
+
 function readWebAppSnapshot(webApp: WebApp): Omit<
   TelegramConnection,
   'isReady' | 'isTelegram'
@@ -54,16 +58,13 @@ function readWebAppSnapshot(webApp: WebApp): Omit<
     user: mapUser(webApp.initDataUnsafe?.user),
     platform: webApp.platform || null,
     version: webApp.version || null,
-    colorScheme: webApp.colorScheme ?? null,
+    colorScheme: readColorScheme(webApp),
     viewportWidth: typeof window !== 'undefined' ? window.innerWidth : null,
     viewportHeight: webApp.viewportHeight ?? webApp.viewportStableHeight ?? null,
     initDataUnsafe: webApp.initDataUnsafe ?? null,
   }
 }
 
-/**
- * Sync, hang-free check: real Telegram sessions always provide init data.
- */
 function isInsideTelegram(webApp: WebApp | null): webApp is WebApp {
   if (!webApp) {
     return false
@@ -76,15 +77,10 @@ function isInsideTelegram(webApp: WebApp | null): webApp is WebApp {
   }
 }
 
-/**
- * Best-effort @telegram-apps/sdk bootstrap.
- * Never throws and is skipped entirely outside Telegram.
- */
 async function bootstrapOfficialSdk(): Promise<void> {
   try {
     const sdk = await import('@telegram-apps/sdk')
 
-    // Sync check only — `isTMA('complete')` can hang in a regular browser.
     if (!sdk.isTMA()) {
       return
     }
@@ -107,13 +103,12 @@ async function bootstrapOfficialSdk(): Promise<void> {
       sdk.expandViewport()
     }
   } catch {
-    // Official SDK is optional — WebApp API is the source of truth for UI data.
+    // Optional SDK path — WebApp remains the source of truth.
   }
 }
 
 /**
- * Connects Mini App safely for both Telegram and regular browsers.
- * Guarantees a resolved result without console errors outside Telegram.
+ * Browser-safe Telegram bootstrap. Never hangs outside Telegram.
  */
 export async function initTelegramApp(): Promise<TelegramConnection> {
   try {
@@ -127,7 +122,7 @@ export async function initTelegramApp(): Promise<TelegramConnection> {
       webApp.ready()
       webApp.expand()
     } catch {
-      // Ignore WebApp method failures — still return available data.
+      // Keep going with whatever data is available.
     }
 
     await bootstrapOfficialSdk()
@@ -144,4 +139,32 @@ export async function initTelegramApp(): Promise<TelegramConnection> {
 
 export function getTelegramWebApp(): WebApp | null {
   return getWebApp()
+}
+
+export function subscribeTelegramTheme(
+  onChange: (scheme: 'light' | 'dark') => void,
+): () => void {
+  const webApp = getWebApp()
+
+  if (!webApp) {
+    return () => undefined
+  }
+
+  const handler = () => {
+    onChange(readColorScheme(webApp))
+  }
+
+  try {
+    webApp.onEvent('themeChanged', handler)
+  } catch {
+    return () => undefined
+  }
+
+  return () => {
+    try {
+      webApp.offEvent('themeChanged', handler)
+    } catch {
+      // no-op
+    }
+  }
 }
