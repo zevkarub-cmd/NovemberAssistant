@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { initTelegramApp } from '@/lib/telegram'
+import { emptyConnection, initTelegramApp } from '@/lib/telegram'
 import type { TelegramConnection } from '@/types/telegram'
 
 const initialState: TelegramConnection = {
@@ -15,8 +15,11 @@ const initialState: TelegramConnection = {
   initDataUnsafe: null,
 }
 
+const INIT_TIMEOUT_MS = 1500
+
 /**
- * Initializes Telegram Mini Apps SDK once and exposes connection state.
+ * Initializes Telegram connection once.
+ * Always resolves to a ready state (browser-safe timeout fallback).
  */
 export function useTelegram(): TelegramConnection {
   const [state, setState] = useState<TelegramConnection>(initialState)
@@ -24,14 +27,32 @@ export function useTelegram(): TelegramConnection {
   useEffect(() => {
     let cancelled = false
 
-    void initTelegramApp().then((connection) => {
+    const timeoutId = window.setTimeout(() => {
       if (!cancelled) {
-        setState(connection)
+        setState((current) =>
+          current.isReady ? current : emptyConnection(),
+        )
       }
-    })
+    }, INIT_TIMEOUT_MS)
+
+    void initTelegramApp()
+      .then((connection) => {
+        if (!cancelled) {
+          setState(connection)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setState(emptyConnection())
+        }
+      })
+      .finally(() => {
+        window.clearTimeout(timeoutId)
+      })
 
     return () => {
       cancelled = true
+      window.clearTimeout(timeoutId)
     }
   }, [])
 

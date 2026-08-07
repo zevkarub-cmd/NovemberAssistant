@@ -1,15 +1,7 @@
-import {
-  expandViewport,
-  init,
-  isTMA,
-  miniAppReady,
-  mountMiniAppSync,
-  mountViewport,
-} from '@telegram-apps/sdk'
 import type { WebApp, WebAppUser } from 'telegram-web-app'
 import type { TelegramConnection, TelegramUser } from '@/types/telegram'
 
-function emptyConnection(
+export function emptyConnection(
   overrides: Partial<TelegramConnection> = {},
 ): TelegramConnection {
   return {
@@ -28,11 +20,15 @@ function emptyConnection(
 }
 
 function getWebApp(): WebApp | null {
-  if (typeof window === 'undefined') {
+  try {
+    if (typeof window === 'undefined') {
+      return null
+    }
+
+    return window.Telegram?.WebApp ?? null
+  } catch {
     return null
   }
-
-  return window.Telegram?.WebApp ?? null
 }
 
 function mapUser(user: WebAppUser | undefined): TelegramUser | null {
@@ -55,10 +51,10 @@ function readWebAppSnapshot(webApp: WebApp): Omit<
 > {
   return {
     webApp,
-    user: mapUser(webApp.initDataUnsafe.user),
+    user: mapUser(webApp.initDataUnsafe?.user),
     platform: webApp.platform || null,
     version: webApp.version || null,
-    colorScheme: webApp.colorScheme,
+    colorScheme: webApp.colorScheme ?? null,
     viewportWidth: typeof window !== 'undefined' ? window.innerWidth : null,
     viewportHeight: webApp.viewportHeight ?? webApp.viewportStableHeight ?? null,
     initDataUnsafe: webApp.initDataUnsafe ?? null,
@@ -66,49 +62,81 @@ function readWebAppSnapshot(webApp: WebApp): Omit<
 }
 
 /**
- * Connects Mini App via @telegram-apps/sdk and Telegram.WebApp.
- * Safe outside Telegram — no throws to the console.
+ * Sync, hang-free check: real Telegram sessions always provide init data.
+ */
+function isInsideTelegram(webApp: WebApp | null): webApp is WebApp {
+  if (!webApp) {
+    return false
+  }
+
+  try {
+    return Boolean(webApp.initData) || Boolean(webApp.initDataUnsafe?.user)
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Best-effort @telegram-apps/sdk bootstrap.
+ * Never throws and is skipped entirely outside Telegram.
+ */
+async function bootstrapOfficialSdk(): Promise<void> {
+  try {
+    const sdk = await import('@telegram-apps/sdk')
+
+    // Sync check only — `isTMA('complete')` can hang in a regular browser.
+    if (!sdk.isTMA()) {
+      return
+    }
+
+    sdk.init()
+
+    if (sdk.mountMiniAppSync.isAvailable()) {
+      sdk.mountMiniAppSync()
+    }
+
+    if (sdk.miniAppReady.isAvailable()) {
+      sdk.miniAppReady()
+    }
+
+    if (sdk.mountViewport.isAvailable()) {
+      await sdk.mountViewport()
+    }
+
+    if (sdk.expandViewport.isAvailable()) {
+      sdk.expandViewport()
+    }
+  } catch {
+    // Official SDK is optional — WebApp API is the source of truth for UI data.
+  }
+}
+
+/**
+ * Connects Mini App safely for both Telegram and regular browsers.
+ * Guarantees a resolved result without console errors outside Telegram.
  */
 export async function initTelegramApp(): Promise<TelegramConnection> {
   try {
-    const insideTelegram = await isTMA('complete')
+    const webApp = getWebApp()
 
-    if (!insideTelegram) {
+    if (!isInsideTelegram(webApp)) {
       return emptyConnection()
     }
 
-    init()
-
-    if (mountMiniAppSync.isAvailable()) {
-      mountMiniAppSync()
-    }
-
-    if (miniAppReady.isAvailable()) {
-      miniAppReady()
-    }
-
-    if (mountViewport.isAvailable()) {
-      await mountViewport()
-    }
-
-    if (expandViewport.isAvailable()) {
-      expandViewport()
-    }
-
-    const webApp = getWebApp()
-
-    if (webApp) {
+    try {
       webApp.ready()
       webApp.expand()
-
-      return {
-        isReady: true,
-        isTelegram: true,
-        ...readWebAppSnapshot(webApp),
-      }
+    } catch {
+      // Ignore WebApp method failures — still return available data.
     }
 
-    return emptyConnection({ isTelegram: true })
+    await bootstrapOfficialSdk()
+
+    return {
+      isReady: true,
+      isTelegram: true,
+      ...readWebAppSnapshot(webApp),
+    }
   } catch {
     return emptyConnection()
   }
