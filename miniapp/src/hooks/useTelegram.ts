@@ -7,17 +7,32 @@ const initialState: TelegramConnection = {
   isTelegram: false,
   webApp: null,
   user: null,
+  platform: null,
+  version: null,
+  colorScheme: null,
+  viewportWidth: null,
+  viewportHeight: null,
+  initDataUnsafe: null,
 }
 
 /**
- * Initializes Telegram.WebApp once and exposes connection + user data.
- * Outside Telegram the app keeps working and reports browser mode.
+ * Initializes Telegram Mini Apps SDK once and exposes connection state.
  */
 export function useTelegram(): TelegramConnection {
   const [state, setState] = useState<TelegramConnection>(initialState)
 
   useEffect(() => {
-    setState(initTelegramApp())
+    let cancelled = false
+
+    void initTelegramApp().then((connection) => {
+      if (!cancelled) {
+        setState(connection)
+      }
+    })
+
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   return state

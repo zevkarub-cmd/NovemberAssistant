@@ -1,11 +1,22 @@
 import { AppHeader } from '@/components/AppHeader'
 import { MenuCard } from '@/components/MenuCard'
-import { TelegramStatus } from '@/components/TelegramStatus'
+import {
+  OutsideTelegramState,
+  TelegramStatus,
+} from '@/components/TelegramStatus'
 import { useTelegram } from '@/hooks/useTelegram'
 import { menuItems } from '@/lib/menu'
 
 export function HomePage() {
   const telegram = useTelegram()
+
+  if (!telegram.isReady) {
+    return <div className="flex flex-1" />
+  }
+
+  if (!telegram.isTelegram) {
+    return <OutsideTelegramState />
+  }
 
   return (
     <div className="flex flex-1 flex-col">

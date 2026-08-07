@@ -1,5 +1,31 @@
+import {
+  expandViewport,
+  init,
+  isTMA,
+  miniAppReady,
+  mountMiniAppSync,
+  mountViewport,
+} from '@telegram-apps/sdk'
 import type { WebApp, WebAppUser } from 'telegram-web-app'
 import type { TelegramConnection, TelegramUser } from '@/types/telegram'
+
+function emptyConnection(
+  overrides: Partial<TelegramConnection> = {},
+): TelegramConnection {
+  return {
+    isReady: true,
+    isTelegram: false,
+    webApp: null,
+    user: null,
+    platform: null,
+    version: null,
+    colorScheme: null,
+    viewportWidth: null,
+    viewportHeight: null,
+    initDataUnsafe: null,
+    ...overrides,
+  }
+}
 
 function getWebApp(): WebApp | null {
   if (typeof window === 'undefined') {
@@ -23,47 +49,68 @@ function mapUser(user: WebAppUser | undefined): TelegramUser | null {
   }
 }
 
-/**
- * Detects whether the app is opened inside Telegram.
- * The WebApp object may exist in a regular browser, but without init data.
- */
-function isInsideTelegram(webApp: WebApp): boolean {
-  return Boolean(webApp.initData) || Boolean(webApp.initDataUnsafe?.user)
+function readWebAppSnapshot(webApp: WebApp): Omit<
+  TelegramConnection,
+  'isReady' | 'isTelegram'
+> {
+  return {
+    webApp,
+    user: mapUser(webApp.initDataUnsafe.user),
+    platform: webApp.platform || null,
+    version: webApp.version || null,
+    colorScheme: webApp.colorScheme,
+    viewportWidth: typeof window !== 'undefined' ? window.innerWidth : null,
+    viewportHeight: webApp.viewportHeight ?? webApp.viewportStableHeight ?? null,
+    initDataUnsafe: webApp.initDataUnsafe ?? null,
+  }
 }
 
 /**
- * Connects to Telegram Mini Apps via Telegram.WebApp.
- * Calls ready() + expand() when available. Safe outside Telegram.
+ * Connects Mini App via @telegram-apps/sdk and Telegram.WebApp.
+ * Safe outside Telegram — no throws to the console.
  */
-export function initTelegramApp(): TelegramConnection {
+export async function initTelegramApp(): Promise<TelegramConnection> {
   try {
+    const insideTelegram = await isTMA('complete')
+
+    if (!insideTelegram) {
+      return emptyConnection()
+    }
+
+    init()
+
+    if (mountMiniAppSync.isAvailable()) {
+      mountMiniAppSync()
+    }
+
+    if (miniAppReady.isAvailable()) {
+      miniAppReady()
+    }
+
+    if (mountViewport.isAvailable()) {
+      await mountViewport()
+    }
+
+    if (expandViewport.isAvailable()) {
+      expandViewport()
+    }
+
     const webApp = getWebApp()
 
-    if (!webApp || !isInsideTelegram(webApp)) {
+    if (webApp) {
+      webApp.ready()
+      webApp.expand()
+
       return {
         isReady: true,
-        isTelegram: false,
-        webApp,
-        user: null,
+        isTelegram: true,
+        ...readWebAppSnapshot(webApp),
       }
     }
 
-    webApp.ready()
-    webApp.expand()
-
-    return {
-      isReady: true,
-      isTelegram: true,
-      webApp,
-      user: mapUser(webApp.initDataUnsafe.user),
-    }
+    return emptyConnection({ isTelegram: true })
   } catch {
-    return {
-      isReady: true,
-      isTelegram: false,
-      webApp: null,
-      user: null,
-    }
+    return emptyConnection()
   }
 }
 
